@@ -6,12 +6,9 @@ using System.Web;
 /// <summary>
 /// Summary description for JSMin
 /// </summary>
-public class CSSMin
+public class CSSMin : IMinify
 {
     const char EOF = char.MinValue;
-    char theA;
-    char theB;
-    char theLookahead = EOF;
     char[] input;
     char[] output;
     public CSSMin(string css)
@@ -59,12 +56,19 @@ public class CSSMin
         return c;
     }
 
+    char peekc()
+    {
+        if (in_idx >= input.Length)
+            return EOF;
+        return input[in_idx];
+    }
+
     int out_idx = 0;
     void putc(char c)
     {
         output[out_idx] = c;
         out_idx++;
-    } 
+    }
 
     /// <summary>
     /// jsmin -- Copy the input to the output, deleting the characters which are
@@ -74,60 +78,69 @@ public class CSSMin
     /// </summary>
     public string Minify()
     {
+        char lastChar = EOF;                   // current byte read
+        char thisChar = EOF;                  // previous byte read
+        char nextChar = EOF;                  // byte read in peek()
+        bool endProcess = false;            // loop control
         bool ignore = false;                // if false then add byte to final output
         bool inComment = false;             // true when current bytes are part of a comment
         bool isDoubleSlashComment = false;  // '//' comment
-        theA = '\n';
-        while (theA != EOF)
+
+
+        // main processing loop
+        while (!endProcess)
         {
+            endProcess = peekc() == EOF;    // check for EOF before reading
+            if (endProcess)
+                break;
+
             ignore = false;
+            thisChar = getc();
 
-            theA = getc();
-            if (theA == '\t')
-                theA = ' ';
-            else if (theA == '\t')
-                theA = '\n';
-            else if (theA == '\r')
-                theA = '\n';
+            if (thisChar == '\t')
+                thisChar = ' ';
+            //else if (thisChar == '\t')
+            //    thisChar = '\n';
+            else if (thisChar == '\r')
+                thisChar = '\n';
 
-            if (theA == '\n')
+            if (thisChar == '\n')
                 ignore = true;
 
-            if (theA == ' ')
+            if (thisChar == ' ')
             {
-                if ((theB == ' ') || isDelimiter(theB))
+                if ((lastChar == ' ') || isDelimiter(lastChar))
                     ignore = true;
                 else
                 {
-                    theB = getc();
-                    if (theB != EOF)
+                    endProcess = (peekc() == EOF); // check for EOF
+                    if (!endProcess)
                     {
-                        theB = getc();
-                        if (isDelimiter(theB))
+                        nextChar = peekc();
+                        if (isDelimiter(nextChar))
                             ignore = true;
                     }
                 }
             }
 
 
-            if (theA == '/')
+            if (thisChar == '/')
             {
-                theB = getc();
-                if (theB == '/' || theB == '*')
+                nextChar = peekc();
+                if (nextChar == '/' || nextChar == '*')
                 {
                     ignore = true;
                     inComment = true;
-                    if (theB == '/')
+                    if (nextChar == '/')
                         isDoubleSlashComment = true;
                     else
                         isDoubleSlashComment = false;
                 }
-                if (theB == '/')
-                {
-                    int x = 0;
-                    x = x + 1;
-                }
-
+                //if (nextChar == '/')
+                //{
+                //    int x = 0;
+                //    x = x + 1;
+                //}
             }
 
             // ignore all characters till we reach end of comment
@@ -135,18 +148,18 @@ public class CSSMin
             {
                 while (true)
                 {
-                    theA = getc();
-                    if (theA == '*')
+                    thisChar = getc();
+                    if (thisChar == '*')
                     {
-                        theB = getc();
-                        if (theB == '/')
+                        nextChar = peekc();
+                        if (nextChar == '/')
                         {
-                            theA = getc();
+                            thisChar = getc();
                             inComment = false;
                             break;
                         }
                     }
-                    if (isDoubleSlashComment && theA == '\n')
+                    if (isDoubleSlashComment && thisChar == '\n')
                     {
                         inComment = false;
                         break;
@@ -158,9 +171,9 @@ public class CSSMin
 
 
             if (!ignore)
-                putc(theA);
+                putc(thisChar);
 
-            theB = theA;
+            lastChar = thisChar;
         } // while (!endProcess) 
         return (new string(output, 0, out_idx)).Trim();
     }

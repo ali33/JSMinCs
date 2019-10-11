@@ -6,7 +6,7 @@ using System.Web;
 /// <summary>
 /// Summary description for JSMin
 /// </summary>
-public class JSMin
+public class JSMin : IMinify
 {
     const char EOF = char.MinValue;
     char theA;
@@ -321,5 +321,38 @@ public class JSMin
             }
         }
         return (new string(output, 0, out_idx)).Trim();
+    }
+
+    public static string JsMinify(string rawJs)
+    {
+        JSMin min = new JSMin(rawJs);
+        return min.Minify();
+    }
+
+    const string S_TAG = "<script";
+    const string E_TAG = "</script>";
+    public static string ScriptMinify(string script)
+    {
+        string openTag, jsContent;
+        int si, ei;
+        si = script.IndexOf(S_TAG, 0, StringComparison.OrdinalIgnoreCase);
+        if (si == -1)
+            return script;
+
+        ei = script.IndexOf(">", si);
+        if (ei == -1)
+            return script;
+
+        openTag = script.Substring(0, ei);
+
+        si = script.IndexOf(E_TAG, ei, StringComparison.OrdinalIgnoreCase);
+
+        if (si == -1)
+            return script;
+
+        ei++;
+        JSMin min = new JSMin(script.Substring(ei, si - ei));
+        jsContent = min.Minify();
+        return string.Concat(openTag, jsContent, script.Substring(si));
     }
 }
