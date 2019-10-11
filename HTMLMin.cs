@@ -50,29 +50,7 @@ public class HTMLMin : IMinify
         {
             ch = getc(i);
             switch (ch)
-            {
-                case '<':
-                    if (!incomment && nextc(i + 1) == '!' && nextc(i + 2) == '-' && nextc(i + 3) == '-')
-                    {
-                        incomment = true;
-                    }
-                    else
-                    {
-                        skip = false;
-                        input[index++] = ch;
-                    }
-                    continue;
-                case '>':
-                    if (incomment && prevc(i - 1) == '-' && prevc(i - 2) == '-')
-                    {
-                        incomment = false;
-                    }
-                    else
-                    {
-                        skip = false;
-                        input[index++] = ch;
-                    }
-                    continue;
+            {                
                 case '\u0020':
                 case '\u00A0':
                 case '\u1680':
@@ -101,6 +79,27 @@ public class HTMLMin : IMinify
                     if (skip) continue;
                     input[index++] = ch;
                     skip = true;
+                    continue;
+                case '<':
+                    if (!incomment && nextc(i + 1) == '!' && nextc(i + 2) == '-' && nextc(i + 3) == '-')
+                    {
+                        skip = true;
+                        incomment = true;
+                        continue;
+                    }
+                    if (!incomment)
+                        input[index++] = ch;
+                    continue;
+                case '>':
+                    if (incomment)
+                    {
+                        skip = true;
+                        if (prevc(i - 1) == '-' && prevc(i - 2) == '-')
+                            incomment = false;
+                        continue;
+                    }
+                    if (!incomment)
+                        input[index++] = ch;
                     continue;
                 default:
                     skip = false;
