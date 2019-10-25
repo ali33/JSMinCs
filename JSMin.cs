@@ -9,15 +9,16 @@ using System.Web;
 public class JSMin : IMinify
 {
     const char EOF = char.MinValue;
-    char theA;
-    char theB;
+    char thisChar;
+    char nextChar;
     char theLookahead = EOF;
     char[] input;
     char[] output;
-    public JSMin(string js)
+    int in_idx = 0;
+    int out_idx = 0;
+    public JSMin()
     {
-        input = js.ToCharArray();
-        output = new char[input.Length + 1];
+
     }
 
     /// <summary>
@@ -34,7 +35,7 @@ public class JSMin : IMinify
             c > 126);
     }
 
-    int in_idx = 0;
+
     char getc()
     {
         if (in_idx == input.Length)
@@ -43,7 +44,7 @@ public class JSMin : IMinify
         in_idx++;
         return c;
     }
-    int out_idx = 0;
+
     void putc(char c)
     {
         output[out_idx] = c;
@@ -145,26 +146,26 @@ public class JSMin : IMinify
         switch (d)
         {
             case 1:
-                putc(theA);
+                putc(thisChar);
                 goto case 2;
             case 2:
-                theA = theB;
-                if (theA == '\'' || theA == '"' || theA == '`')
+                thisChar = nextChar;
+                if (thisChar == '\'' || thisChar == '"' || thisChar == '`')
                 {
                     for (; ; )
                     {
-                        putc(theA);
-                        theA = get();
-                        if (theA == theB)
+                        putc(thisChar);
+                        thisChar = get();
+                        if (thisChar == nextChar)
                         {
                             break;
                         }
-                        if (theA == '\\')
+                        if (thisChar == '\\')
                         {
-                            putc(theA);
-                            theA = get();
+                            putc(thisChar);
+                            thisChar = get();
                         }
-                        if (theA == EOF)
+                        if (thisChar == EOF)
                         {
                             throw new Exception("Error: JSMIN unterminated string literal.");
                         }
@@ -172,55 +173,55 @@ public class JSMin : IMinify
                 }
                 goto case 3;
             case 3:
-                theB = next();
-                if (theB == '/' && (theA == '(' || theA == ',' || theA == '=' ||
-                                    theA == ':' || theA == '[' || theA == '!' ||
-                                    theA == '&' || theA == '|' || theA == '?' ||
-                                    theA == '{' || theA == '}' || theA == ';' ||
-                                    theA == '\n'))
+                nextChar = next();
+                if (nextChar == '/' && (thisChar == '(' || thisChar == ',' || thisChar == '=' ||
+                                    thisChar == ':' || thisChar == '[' || thisChar == '!' ||
+                                    thisChar == '&' || thisChar == '|' || thisChar == '?' ||
+                                    thisChar == '{' || thisChar == '}' || thisChar == ';' ||
+                                    thisChar == '\n'))
                 {
-                    putc(theA);
-                    putc(theB);
+                    putc(thisChar);
+                    putc(nextChar);
                     for (; ; )
                     {
-                        theA = get();
-                        if (theA == '[')
+                        thisChar = get();
+                        if (thisChar == '[')
                         {
                             for (; ; )
                             {
-                                putc(theA);
-                                theA = get();
-                                if (theA == ']')
+                                putc(thisChar);
+                                thisChar = get();
+                                if (thisChar == ']')
                                 {
                                     break;
                                 }
-                                if (theA == '\\')
+                                if (thisChar == '\\')
                                 {
-                                    putc(theA);
-                                    theA = get();
+                                    putc(thisChar);
+                                    thisChar = get();
                                 }
-                                if (theA == EOF)
+                                if (thisChar == EOF)
                                 {
                                     throw new Exception("Error: JSMIN unterminated set in Regular Expression literal.\n");
                                 }
                             }
                         }
-                        else if (theA == '/')
+                        else if (thisChar == '/')
                         {
                             break;
                         }
-                        else if (theA == '\\')
+                        else if (thisChar == '\\')
                         {
-                            putc(theA);
-                            theA = get();
+                            putc(thisChar);
+                            thisChar = get();
                         }
-                        if (theA == EOF)
+                        if (thisChar == EOF)
                         {
                             throw new Exception("Error: JSMIN unterminated Regular Expression literal.\n");
                         }
-                        putc(theA);
+                        putc(thisChar);
                     }
-                    theB = next();
+                    nextChar = next();
                 }
                 break;
         }
@@ -232,16 +233,23 @@ public class JSMin : IMinify
     ///     replaced with spaces. Carriage returns will be replaced with linefeeds.
     ///    Most spaces and linefeeds will be removed.
     /// </summary>
-    public string Minify()
+    public string Minify(string rawCode)
     {
-        theA = '\n';
+        if (string.IsNullOrWhiteSpace(rawCode))
+            return "";
+        input = rawCode.ToCharArray();
+        output = new char[input.Length + 1];
+        in_idx = 0;
+        out_idx = 0;
+
+        thisChar = '\n';
         action(3);
-        while (theA != EOF)
+        while (thisChar != EOF)
         {
-            switch (theA)
+            switch (thisChar)
             {
                 case ' ':
-                    if (isAlphanum(theB))
+                    if (isAlphanum(nextChar))
                     {
                         action(1);
                     }
@@ -252,7 +260,7 @@ public class JSMin : IMinify
                     break;
                 case '\n':
                     {
-                        switch (theB)
+                        switch (nextChar)
                         {
                             case '{':
                             case '[':
@@ -265,7 +273,7 @@ public class JSMin : IMinify
                                 action(3);
                                 break;
                             default:
-                                if (isAlphanum(theB))
+                                if (isAlphanum(nextChar))
                                 {
                                     action(1);
                                 }
@@ -278,10 +286,10 @@ public class JSMin : IMinify
                     }
                     break;
                 default:
-                    switch (theB)
+                    switch (nextChar)
                     {
                         case ' ':
-                            if (isAlphanum(theA))
+                            if (isAlphanum(thisChar))
                             {
                                 action(1);
                                 break;
@@ -289,7 +297,7 @@ public class JSMin : IMinify
                             action(3);
                             break;
                         case '\n':
-                            switch (theA)
+                            switch (thisChar)
                             {
                                 case '}':
                                 case ']':
@@ -302,7 +310,7 @@ public class JSMin : IMinify
                                     action(1);
                                     break;
                                 default:
-                                    if (isAlphanum(theA))
+                                    if (isAlphanum(thisChar))
                                     {
                                         action(1);
                                     }
@@ -325,8 +333,8 @@ public class JSMin : IMinify
 
     public static string JsMinify(string rawJs)
     {
-        JSMin min = new JSMin(rawJs);
-        return min.Minify();
+        IMinify min = new JSMin();
+        return min.Minify(rawJs);
     }
 
     const string S_TAG = "<script";
@@ -351,8 +359,8 @@ public class JSMin : IMinify
             return script;
 
         ei++;
-        JSMin min = new JSMin(script.Substring(ei, si - ei));
-        jsContent = min.Minify();
+        IMinify min = new JSMin(); 
+        jsContent = min.Minify(script.Substring(ei, si - ei));
         return string.Concat(openTag, jsContent, script.Substring(si));
     }
 }

@@ -11,10 +11,9 @@ public class CSSMin : IMinify
     const char EOF = char.MinValue;
     char[] input;
     char[] output;
-    public CSSMin(string css)
+    public CSSMin()
     {
-        input = css.ToCharArray();
-        output = new char[input.Length + 1];
+       
     }
 
     /// <summary>
@@ -69,6 +68,7 @@ public class CSSMin : IMinify
         output[out_idx] = c;
         out_idx++;
     }
+     
 
     /// <summary>
     /// jsmin -- Copy the input to the output, deleting the characters which are
@@ -76,8 +76,15 @@ public class CSSMin : IMinify
     ///     replaced with spaces. Carriage returns will be replaced with linefeeds.
     ///    Most spaces and linefeeds will be removed.
     /// </summary>
-    public string Minify()
+    public string Minify(string rawCode)
     {
+        if (string.IsNullOrWhiteSpace(rawCode))
+            return "";
+        input = rawCode.ToCharArray();
+        output = new char[input.Length + 1];
+        in_idx = 0;
+        out_idx = 0;
+
         char lastChar = EOF;                   // current byte read
         char thisChar = EOF;                  // previous byte read
         char nextChar = EOF;                  // byte read in peek()
@@ -124,23 +131,14 @@ public class CSSMin : IMinify
             }
 
 
-            if (thisChar == '/')
+            if (!inComment && thisChar == '/')
             {
                 nextChar = peekc();
-                if (nextChar == '/' || nextChar == '*')
+                if (nextChar == '*')
                 {
                     ignore = true;
                     inComment = true;
-                    if (nextChar == '/')
-                        isDoubleSlashComment = true;
-                    else
-                        isDoubleSlashComment = false;
                 }
-                //if (nextChar == '/')
-                //{
-                //    int x = 0;
-                //    x = x + 1;
-                //}
             }
 
             // ignore all characters till we reach end of comment
@@ -159,6 +157,10 @@ public class CSSMin : IMinify
                             break;
                         }
                     }
+                    else if (thisChar == EOF)
+                    {
+                        break;
+                    }
                     if (isDoubleSlashComment && thisChar == '\n')
                     {
                         inComment = false;
@@ -175,13 +177,15 @@ public class CSSMin : IMinify
 
             lastChar = thisChar;
         } // while (!endProcess) 
-        return (new string(output, 0, out_idx)).Trim();
+        string result = (new string(output, 0, out_idx)).Trim();
+
+        return result;
     }
 
     public static string CssMinify(string rawCss)
     {
-        CSSMin min = new CSSMin(rawCss);
-        return min.Minify();
+        IMinify min = new CSSMin();
+        return min.Minify(rawCss);
     }
 
     const string S_TAG = "<style";
@@ -206,8 +210,8 @@ public class CSSMin : IMinify
             return script;
 
         ei++;
-        CSSMin min = new CSSMin(script.Substring(ei, si - ei));
-        cssContent = min.Minify();
+        IMinify min = new CSSMin(); 
+        cssContent = min.Minify(script.Substring(ei, si - ei));
         return string.Concat(openTag, cssContent, script.Substring(si));
-    }
+    }    
 }

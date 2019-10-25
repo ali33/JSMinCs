@@ -1,5 +1,5 @@
 ﻿using System;
 interface IMinify
 {
-    string Minify();
+    string Minify(string rawCode);
 }

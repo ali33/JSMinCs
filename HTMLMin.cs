@@ -10,12 +10,12 @@ public class HTMLMin : IMinify
 {
     const char EOF = char.MinValue;
     char[] input;
-    public HTMLMin(string html)
-    {
-        input = html.ToCharArray();
-    }
-
     int len, index;
+
+    public HTMLMin()
+    {
+
+    }
 
     private char getc(int i)
     {
@@ -38,8 +38,9 @@ public class HTMLMin : IMinify
             return EOF;
     }
 
-    public string Minify()
+    public string Minify(string rawCode)
     {
+        input = rawCode.ToCharArray();
         len = input.Length;
         index = 0;
         int i = 0;
@@ -50,7 +51,7 @@ public class HTMLMin : IMinify
         {
             ch = getc(i);
             switch (ch)
-            {                
+            {
                 case '\u0020':
                 case '\u00A0':
                 case '\u1680':
@@ -113,15 +114,53 @@ public class HTMLMin : IMinify
 
     public static string HtmlMinify(string html)
     {
-        HTMLMin min = new HTMLMin(html);
-        return min.Minify();
+        IMinify min = new HTMLMin();
+        return min.Minify(html);
+    }
+
+    public enum CodeType : int
+    {
+        Html = 0,
+        Js = 1,
+        Css = 2
+    }
+
+    public struct CodeItem
+    {
+        public CodeType ItemType { get; set; }
+        public string OpenTag { get; set; }
+        public string Content { get; set; }
+        public string CloseTag { get; set; }
+        public int StartIndex { get; set; }
+        public int EndIndex { get; set; }
+        public static CodeItem NewItem(
+            CodeType itemType,
+            string openTag,
+            string content,
+            string closeTag,
+            int startIndex,
+            int endIndex)
+        {
+            return new CodeItem
+            {
+                ItemType = itemType,
+                OpenTag = openTag,
+                Content = content,
+                CloseTag = closeTag,
+                StartIndex = startIndex,
+                EndIndex = endIndex
+            };
+        }
     }
 
     public static string HtmlTidy(string html,
-        bool removeHtmlWhiteSpace = false,
-        bool removeJsWhiteSpace = false,
-        bool removeCssWhiteSpace = false)
+        bool minifyHtml = true,
+        bool minifyJs = true,
+        bool minifyCss = true,
+        bool optimizeJsPostion = true,
+        bool optimizeCssPostion = true)
     {
+        //return html;
         const string SCRIPT_TAG_START = "<script";
         const string SCRIPT_TAG_END = "</script>";
 
@@ -131,128 +170,125 @@ public class HTMLMin : IMinify
         const string HEAD_TAG_END = "</head>";
         const string BODY_TAG_END = "</body>";
 
-        StringBuilder sb = new StringBuilder(html.Length);
-        string tail = "";
-
         int startLength = STYLE_TAG_START.Length;
         int endLength = SCRIPT_TAG_END.Length;
-        int start_idx, end_idx, offset = 0;
-        int head_idx = html.IndexOf(HEAD_TAG_END, StringComparison.OrdinalIgnoreCase);
+        int startIdx, endIdx, offset = 0;
+        int headIdx = html.IndexOf(HEAD_TAG_END, StringComparison.OrdinalIgnoreCase);
+        int bodyEndIdx = -1;
 
         string scriptStr = "";
-        List<string> lsScripts = new List<string>();
-        List<string> lsStyles = new List<string>();
+        List<CodeItem> lsParts = new List<CodeItem>();
+        List<CodeItem> lsResult = new List<CodeItem>();
         int close, endblock;
 
-        Func<string, string> removeHtmlFx;
-
-        if (removeHtmlWhiteSpace)
-            removeHtmlFx = HtmlMinify;
-        else
-            removeHtmlFx = (x) => x;
-
         /*Javascript*/
-        while ((start_idx = html.IndexOf(SCRIPT_TAG_START, offset, StringComparison.OrdinalIgnoreCase)) != -1)
+        while ((startIdx = html.IndexOf(SCRIPT_TAG_START, offset, StringComparison.OrdinalIgnoreCase)) != -1)
         {
-
-            if ((end_idx = html.IndexOf(SCRIPT_TAG_END, start_idx + startLength, StringComparison.OrdinalIgnoreCase)) == -1)
+            if ((endIdx = html.IndexOf(SCRIPT_TAG_END, startIdx + startLength, StringComparison.OrdinalIgnoreCase)) == -1)
                 break;
 
-            scriptStr = html.Substring(start_idx, end_idx + endLength - start_idx);
-            if (removeJsWhiteSpace)
+            lsParts.Add(CodeItem.NewItem(CodeType.Html, "", html.Substring(offset, startIdx - offset), "", offset, startIdx));
+
+            scriptStr = html.Substring(startIdx, endIdx + endLength - startIdx);
+            close = scriptStr.IndexOf('>');
+            if (close != -1)
             {
-                close = scriptStr.IndexOf('>');
-                if (close != -1)
-                {
-                    endblock = end_idx - start_idx;
-                    scriptStr = string.Concat(scriptStr.Substring(0, close + 1),
-                        JSMin.JsMinify(scriptStr.Substring(close + 1, endblock - (close + 1))),
-                        scriptStr.Substring(endblock));
-                }
+                endblock = endIdx - startIdx;
+                lsParts.Add(CodeItem.NewItem(CodeType.Js,
+                          scriptStr.Substring(0, close + 1),
+                          scriptStr.Substring(close + 1, endblock - (close + 1)),
+                          scriptStr.Substring(endblock),
+                          startIdx,
+                          endIdx + endLength
+                          ));
             }
-            sb.Append(html.Substring(offset, start_idx - offset));
-            offset = end_idx + endLength;
-            lsScripts.Add(scriptStr);
+            offset = endIdx + endLength;
         }
 
+        //if ((endIdx = html.IndexOf(BODY_TAG_END, offset, StringComparison.OrdinalIgnoreCase)) != -1)
+        //{
+        //    bodyEndIdx = endIdx;
+        //    lsParts.Add(CodeItem.NewItem(CodeType.Html, "", html.Substring(offset, endIdx - offset), "", offset, endIdx));
+        //    lsParts.Add(CodeItem.NewItem(CodeType.Html, "", html.Substring(endIdx), "", endIdx, html.Length - 1));  //tail
+        //}
+        //else
+        //{
+        lsParts.Add(CodeItem.NewItem(CodeType.Html, "", html.Substring(offset), "", offset, html.Length - 1));
+        //}
 
-        if ((end_idx = html.IndexOf(BODY_TAG_END, offset, StringComparison.OrdinalIgnoreCase)) != -1)
-        {
-            sb.Append(html.Substring(offset, end_idx - offset));
-            tail = html.Substring(end_idx);
-        }
-        else
-        {
-            sb.Append(html.Substring(offset));
-        }
-
-        html = sb.ToString();
-
-        /*Css*/
-        sb.Clear();
-        offset = 0;
-
-        if (head_idx != -1)
-            head_idx = html.IndexOf(HEAD_TAG_END, StringComparison.OrdinalIgnoreCase);
 
         startLength = STYLE_TAG_START.Length;
         endLength = STYLE_TAG_END.Length;
-
-        while ((start_idx = html.IndexOf(STYLE_TAG_START, offset, StringComparison.OrdinalIgnoreCase)) != -1)
+        int i;
+        for (i = 0; i < lsParts.Count; i++)
         {
-
-
-            if ((end_idx = html.IndexOf(STYLE_TAG_END, start_idx + startLength, StringComparison.OrdinalIgnoreCase)) == -1)
-                break;
-
-            scriptStr = html.Substring(start_idx, end_idx + endLength - start_idx);
-            if (removeCssWhiteSpace)
+            var code = lsParts[i];
+            if (code.ItemType == CodeType.Js)
             {
-                close = scriptStr.IndexOf('>');
-                if (close != -1)
-                {
-                    endblock = end_idx - start_idx;
-                    scriptStr = string.Concat(scriptStr.Substring(0, close + 1),
-                        CSSMin.CssMinify(scriptStr.Substring(close + 1, endblock - (close + 1))),
-                        scriptStr.Substring(endblock));
-                }
-            }
-
-            sb.Append(removeHtmlFx(html.Substring(offset, start_idx - offset)));
-
-            offset = end_idx + endLength;
-
-            if (start_idx > head_idx)
-            {
-                lsStyles.Add(scriptStr);
+                lsResult.Add(code);
             }
             else
             {
-                sb.Append(scriptStr);
+                offset = 0;
+                while ((startIdx = code.Content.IndexOf(STYLE_TAG_START, offset, StringComparison.OrdinalIgnoreCase)) != -1)
+                {
+                    if ((endIdx = code.Content.IndexOf(STYLE_TAG_END, startIdx + startLength, StringComparison.OrdinalIgnoreCase)) == -1)
+                        break;
+
+                    lsResult.Add(CodeItem.NewItem(CodeType.Html, "", code.Content.Substring(offset, startIdx - offset), "", code.StartIndex + offset, code.StartIndex + startIdx));
+
+                    scriptStr = code.Content.Substring(startIdx, endIdx + endLength - startIdx);
+                    close = scriptStr.IndexOf('>');
+                    if (close != -1)
+                    {
+                        endblock = endIdx - startIdx;
+                        lsResult.Add(CodeItem.NewItem(CodeType.Css,
+                         scriptStr.Substring(0, close + 1),
+                         scriptStr.Substring(close + 1, endblock - (close + 1)),
+                         scriptStr.Substring(endblock),
+                         code.StartIndex + startIdx,
+                         code.StartIndex + (endIdx + endLength)
+                         ));
+                    }
+                    offset = endIdx + endLength;
+                }
+                lsResult.Add(CodeItem.NewItem(CodeType.Html, "", code.Content.Substring(offset), "", code.StartIndex + offset, code.StartIndex + code.Content.Length - 1));
             }
         }
-        sb.Append(removeHtmlFx(html.Substring(offset)));
-
-
-        html = sb.ToString();
-        sb.Clear();
-
-        if (head_idx != -1)
-            head_idx = html.IndexOf(HEAD_TAG_END, StringComparison.OrdinalIgnoreCase);
-
-        if (head_idx == -1)
+        if (headIdx == -1 || bodyEndIdx == -1)
         {
-            sb.Append(html);
-            sb.Append(string.Concat(lsScripts));
-            sb.Append(removeHtmlFx(tail));
+            optimizeCssPostion = optimizeJsPostion = false;
         }
-        else
+
+        StringBuilder sb = new StringBuilder();
+        HTMLMin _htmlMin = new HTMLMin();
+        CSSMin _cssMin = new CSSMin();
+        JSMin _jsMin = new JSMin();
+
+        for (i = 0; i < lsResult.Count; i++)
         {
-            sb.Append(html.Substring(0, head_idx));
-            sb.Append(string.Concat(lsStyles));
-            sb.Append(html.Substring(head_idx));
-            sb.Append(string.Concat(lsScripts));
-            sb.Append(removeHtmlFx(tail));
+            var code = lsResult[i];
+            if (code.ItemType == CodeType.Html)
+            {
+                if (minifyHtml)
+                    code.Content = _htmlMin.Minify(code.Content);
+            }
+            else if (code.ItemType == CodeType.Js)
+            {
+                if (minifyJs)
+                    code.Content = _jsMin.Minify(code.Content);
+            }
+            if (code.ItemType == CodeType.Css)
+            {
+                if (minifyCss)
+                    code.Content = _cssMin.Minify(code.Content);
+            }
+            //sb.Append("<hr>");
+            //sb.AppendFormat("tt: {0} ({1}-{2})", i, code.StartIndex, code.EndIndex);
+            //sb.Append("<hr>");
+            sb.Append(code.OpenTag);
+            sb.Append(code.Content);
+            sb.Append(code.CloseTag);
         }
         return sb.ToString();
     }
